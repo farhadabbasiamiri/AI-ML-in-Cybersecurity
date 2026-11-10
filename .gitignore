@@ -6,3 +6,4 @@ venv/
 .pytest_cache/
 chroma_db/
 logs/
+data/_cache/
