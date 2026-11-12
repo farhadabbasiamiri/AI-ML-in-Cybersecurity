@@ -59,7 +59,8 @@ triagemate/
     parser.py            flattens raw alerts into standard fields
     scorer.py            rule based baseline severity scorer
     mitre.py             MITRE ATT&CK lookup tool
-    llm.py               local LLM agent (Ollama) with safe fallback
+    ml_classifier.py     TF-IDF + Logistic Regression category model
+    llm.py               configured LLM agent with safe fallback
     pipeline.py          load -> parse -> score -> MITRE
   eval/
     evaluate.py          precision and recall against the answer key
@@ -131,7 +132,12 @@ pytest                    # run the unit tests
 python eval/evaluate.py   # measure accuracy against the answer key
 ```
 
-Current rule based baseline on the 110 alert set: 87.3 percent category accuracy, with a 58 percent catch rate on High and Critical threats. These numbers are the baseline the LLM agent is measured against, so improvement from the agent is the core of the evaluation.
+The pipeline includes a supervised category model trained from
+`data/all_labels.csv`: TF-IDF features with Logistic Regression. The model is
+evaluated on a held-out test split by `eval/evaluate.py`; the rule-based
+category and priority scorer remains the safety baseline. Current results can
+change when the dataset changes, so use the evaluation command for the latest
+numbers.
 
 ---
 
@@ -154,13 +160,16 @@ The dataset combines three sources: 100 synthetic alerts generated with a fixed 
 
 ## Technology
 
-Python, Gradio (interface), Ollama with a local open model (LLM), a rule based scorer and MITRE lookup (Python), pandas (data), and pytest (tests). Chroma based RAG retrieval of playbook guidance is the planned next addition.
+Python, Gradio, scikit-learn (TF-IDF and Logistic Regression), Groq/Ollama/Gemini
+LLM providers, a rule-based scorer, MITRE lookup, pandas, and pytest.
 
 ---
 
 ## Roadmap
 
-1. Done: data pipeline, rule based scorer, MITRE lookup, local LLM agent with fallback, Gradio interface, human approval, tests, evaluation.
+1. Done: data pipeline, rule-based scorer, supervised ML category model, MITRE
+   lookup, configurable LLM agent with fallback, Gradio interface, human
+   approval, tests, and evaluation.
 2. Next: RAG playbook retrieval with Chroma to ground the explanations in written investigation guidance.
 3. Then: logging and monitoring tab, failure handling tests, Docker packaging, and the final report and demo.
 

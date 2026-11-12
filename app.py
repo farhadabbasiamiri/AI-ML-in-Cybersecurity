@@ -1,8 +1,8 @@
 """
 SOC Alert Triage Agent (MVP)
 
-Deterministic pipeline (parse + rule score + MITRE lookup) runs on load.
-The LLM agent (local, via Ollama) runs on demand in the Alert Detail tab and
+Pipeline (parse + rule score + ML category + MITRE lookup) runs on load.
+The configured LLM agent runs on demand in the Alert Detail tab and
 writes the summary, priority reason, and safe next steps. If Ollama is not
 running, a rule based fallback is used so the demo never breaks.
 
@@ -35,7 +35,9 @@ def build_queue(file_obj):
     STATE["approved"] = set()
     STATE["analysis"] = {}
     view = df[["alert_id", "priority", "score", "category_guess",
-               "mitre_id", "rule_name", "host"]].copy()
+               "ml_category", "ml_confidence", "mitre_id",
+               "rule_name", "host"]].copy()
+    view["ml_confidence"] = view["ml_confidence"].round(2)
     view.insert(0, "", view["priority"].map(PRIORITY_EMOJI))
     choices = df["alert_id"].tolist()
     online = "online" if llm_available() else "offline (fallback will be used)"
@@ -135,6 +137,7 @@ def show_detail(alert_id):
 
 **Rule:** {row['rule_name']}
 **Baseline category:** {row['category_guess']}
+**ML category:** {row['ml_category']} (confidence {row['ml_confidence']:.2f})
 **MITRE ATT&CK:** {mitre}
 **Host:** {row['host']}   **User:** {row['user']}
 **Source IP:** {row['src_ip']}   **Log source:** {row['log_source']}

@@ -47,6 +47,8 @@ def test_benign_scores_low():
 def test_every_alert_gets_a_priority():
     out = triage_one({"alert_id": "E1"})
     assert out["priority"] in ("Low", "Medium", "High", "Critical")
+    assert out["ml_category"]
+    assert 0.0 <= out["ml_confidence"] <= 1.0
 
 
 def test_mitre_lookup_maps_known_techniques():

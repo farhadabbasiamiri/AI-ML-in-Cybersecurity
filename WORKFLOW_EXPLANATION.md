@@ -154,6 +154,12 @@ category_guess
 reasons
 ```
 
+The application also runs a supervised category model. TF-IDF converts the
+alert text into numerical features and Logistic Regression predicts the
+category. The result is displayed separately as `ml_category` with an
+`ml_confidence` value. The ML prediction does not replace the rule-based
+priority score.
+
 For example, an alert containing `vssadmin delete shadows` may receive a high
 priority because deleting shadow copies is associated with ransomware activity.
 

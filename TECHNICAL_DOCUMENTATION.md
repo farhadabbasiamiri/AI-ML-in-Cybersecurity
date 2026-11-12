@@ -27,29 +27,34 @@ should only receive synthetic or approved data.
    [1] parser.py      normalise the raw alert into flat fields
                               |
                               v
-   [2] scorer.py      rule-based risk score + category guess   (always runs)
+   [2] scorer.py      rule-based risk score + category baseline (always runs)
                               |
                               v
-   [3] mitre.py       map the alert to a MITRE ATT&CK technique (always runs)
+   [3] ml_classifier.py  TF-IDF + Logistic Regression category prediction
                               |
                               v
-   [4] rag.py         retrieve relevant ATT&CK + playbook knowledge (always runs)
+   [4] mitre.py       map the alert to a MITRE ATT&CK technique (always runs)
                               |
                               v
-   [5] llm.py         LOCAL LLM writes summary, priority reason, safe next steps,
+   [5] rag.py         retrieve relevant ATT&CK + playbook knowledge (always runs)
+                              |
+                              v
+   [6] llm.py         configured LLM writes summary, priority reason, safe steps,
                       grounded in the retrieved knowledge, with citations
                       (falls back to rules if the LLM is offline)
                               |
                               v
-   [6] app.py         analyst reviews everything, then APPROVES
+   [7] app.py         analyst reviews everything, then APPROVES
                               |
                               v
                       JSON ticket (priority, MITRE, summary, steps, citations)
 ```
 
-Steps 1 to 4 are plain deterministic Python, so they always work. Step 5 is the
-one place an LLM is used, and it degrades safely. This is the "hybrid" design:
-reliable core, intelligent layer on top.
+Steps 1 to 5 run locally before the LLM request. The ML model is trained from
+the labelled training data and then performs local inference; the rule-based
+scorer remains the safety baseline. The LLM is the explanation layer and
+degrades safely. This is the "hybrid" design: reliable core, intelligent layer
+on top.
 
 ---
 
@@ -67,6 +72,9 @@ reliable core, intelligent layer on top.
   fields, filling missing values safely so nothing crashes.
 - `scorer.py` - `score_alert()` gives each alert a rule-based score, priority, and
   category guess, with the reasons. This is the baseline and the safety net.
+- `ml_classifier.py` - trains a TF-IDF plus Logistic Regression category
+  classifier from labelled alerts. It returns an ML category and confidence;
+  it does not replace the rule-based priority scorer.
 - `mitre.py` - `mitre_lookup()` maps an alert's text to a MITRE ATT&CK technique
   by keyword.
 - `rag.py` - the retriever. Builds a knowledge base from the ATT&CK subset and the
@@ -87,7 +95,27 @@ reliable core, intelligent layer on top.
 
 ---
 
-## 4. What makes this a real agent (not just a classifier)
+## 4. Supervised ML category model
+
+The project uses `data/all_labels.csv` as training ground truth. The model
+combines `rule_name`, `raw_log`, `log_source`, and `data_source` into text,
+converts that text into TF-IDF features, and trains multiclass Logistic
+Regression with balanced class weights. For each alert it returns:
+
+- `ml_category` - the predicted alert category
+- `ml_confidence` - the predicted class probability
+
+The rule-based `category_guess` remains visible as a transparent baseline, and
+the rule-based score remains responsible for priority. This prevents the ML
+model from silently changing the safety-critical prioritization logic.
+
+`eval/evaluate.py` trains the classifier only on the training portion and
+reports results on a stratified held-out test portion. This prevents training
+data from being used as evidence of generalization. The current dataset has
+188 labelled alerts, with 47 held out for testing; run the command again after
+changing data to regenerate the metrics.
+
+## 5. What makes this a real agent (not just a classifier)
 
 The course guide is explicit: a UI wired to one classifier is not an agent. The
 agent must select and run tools, interpret the results, and respond. In TriageMate:
