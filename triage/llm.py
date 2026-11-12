@@ -1,5 +1,5 @@
 """
-LLM agent step. Calls a LOCAL model through Ollama to write the analyst-facing
+LLM agent step. Calls a configured model provider to write the analyst-facing
 summary, explanation, and next steps, grounded in the parsed alert, the rule
 based score, and the MITRE lookup.
 
@@ -7,18 +7,30 @@ Safe by design: if Ollama is not running or times out, we fall back to a
 clear rule based explanation so the app never breaks. This is the one LLM
 step the course requires; everything feeding it is deterministic.
 
-Requires Ollama running locally:  ollama pull llama3.1:8b
+Supported providers are Ollama, Groq, and Gemini. If a provider is unavailable,
+the rule-based fallback keeps the application usable.
 """
 import json
 import os
 from typing import Dict
 
 import requests
+from dotenv import load_dotenv
 
 from .rag import retrieve
 
+load_dotenv()
+
+LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "ollama").lower()
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434/api/chat")
-LLM_MODEL = os.environ.get("LLM_MODEL", "llama3.1:8b")
+LLM_MODEL = os.environ.get(
+    "LLM_MODEL",
+    {"groq": "openai/gpt-oss-20b", "gemini": "gemini-2.0-flash"}.get(
+        LLM_PROVIDER, "llama3.1:8b"
+    ),
+)
+GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
+GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 TIMEOUT = int(os.environ.get("LLM_TIMEOUT", "60"))
 
 SYSTEM = (
@@ -56,11 +68,25 @@ Respond with exactly this JSON shape:
 
 
 def llm_available() -> bool:
-    """Quick check: is Ollama reachable?"""
+    """Quick check that the configured provider is usable."""
     try:
-        base = OLLAMA_URL.rsplit("/api/", 1)[0]
-        requests.get(base + "/api/tags", timeout=3).raise_for_status()
-        return True
+        if LLM_PROVIDER == "ollama":
+            base = OLLAMA_URL.rsplit("/api/", 1)[0]
+            requests.get(base + "/api/tags", timeout=3).raise_for_status()
+            return True
+        if LLM_PROVIDER == "groq":
+            key = os.environ["GROQ_API_KEY"]
+            requests.get(
+                "https://api.groq.com/openai/v1/models",
+                headers={"Authorization": "Bearer " + key},
+                timeout=3,
+            ).raise_for_status()
+            return True
+        if LLM_PROVIDER == "gemini":
+            key = os.environ["GEMINI_API_KEY"]
+            requests.get(GEMINI_URL, params={"key": key}, timeout=3).raise_for_status()
+            return True
+        return False
     except Exception:
         return False
 
@@ -92,7 +118,7 @@ def _fallback(enriched: Dict) -> Dict:
 
 
 def analyze_with_llm(enriched: Dict) -> Dict:
-    """Ask the local LLM to explain one alert. Falls back safely on any error.
+    """Ask the configured LLM to explain one alert. Falls back safely on any error.
 
     Retrieves relevant MITRE/playbook knowledge first (RAG) and grounds the
     explanation in it, returning the citations used.
@@ -111,15 +137,46 @@ def analyze_with_llm(enriched: Dict) -> Dict:
         context=context,
     )
     try:
-        resp = requests.post(OLLAMA_URL, timeout=TIMEOUT, json={
-            "model": LLM_MODEL, "stream": False, "format": "json",
-            "messages": [{"role": "system", "content": SYSTEM},
-                         {"role": "user", "content": prompt}],
-        })
-        resp.raise_for_status()
-        content = resp.json()["message"]["content"]
+        messages = [
+            {"role": "system", "content": SYSTEM},
+            {"role": "user", "content": prompt},
+        ]
+        if LLM_PROVIDER == "ollama":
+            resp = requests.post(OLLAMA_URL, timeout=TIMEOUT, json={
+                "model": LLM_MODEL, "stream": False, "format": "json",
+                "messages": messages,
+            })
+            resp.raise_for_status()
+            content = resp.json()["message"]["content"]
+        elif LLM_PROVIDER == "groq":
+            key = os.environ["GROQ_API_KEY"]
+            resp = requests.post(
+                GROQ_URL,
+                timeout=TIMEOUT,
+                headers={"Authorization": "Bearer " + key},
+                json={"model": LLM_MODEL, "temperature": 0, "response_format": {"type": "json_object"},
+                      "messages": messages},
+            )
+            resp.raise_for_status()
+            content = resp.json()["choices"][0]["message"]["content"]
+        elif LLM_PROVIDER == "gemini":
+            key = os.environ["GEMINI_API_KEY"]
+            resp = requests.post(
+                f"{GEMINI_URL}/{LLM_MODEL}:generateContent",
+                params={"key": key},
+                timeout=TIMEOUT,
+                json={
+                    "system_instruction": {"parts": [{"text": SYSTEM}]},
+                    "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+                    "generationConfig": {"responseMimeType": "application/json", "temperature": 0},
+                },
+            )
+            resp.raise_for_status()
+            content = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
+        else:
+            raise ValueError(f"Unsupported LLM_PROVIDER: {LLM_PROVIDER}")
         data = json.loads(content)
-        data["source"] = f"LLM ({LLM_MODEL})"
+        data["source"] = f"LLM ({LLM_PROVIDER}/{LLM_MODEL})"
         data["citations"] = citations
         # keep the shape predictable
         data.setdefault("priority", enriched["priority"])

@@ -16,7 +16,7 @@ import gradio as gr
 import pandas as pd
 
 from triage.pipeline import load_alerts, triage_all, PRIORITY_RANK
-from triage.llm import analyze_with_llm, llm_available
+from triage.llm import LLM_PROVIDER, analyze_with_llm, llm_available
 from triage.rag import retrieve, backend_name
 from triage import dashboard as dash
 
@@ -40,7 +40,7 @@ def build_queue(file_obj):
     choices = df["alert_id"].tolist()
     online = "online" if llm_available() else "offline (fallback will be used)"
     msg = (f"Loaded {len(df)} alerts. {df['priority'].value_counts().to_dict()}  "
-           f"| Local LLM: {online} | RAG: {backend_name()}")
+           f"| LLM provider: {LLM_PROVIDER} ({online}) | RAG: {backend_name()}")
     first = choices[0] if choices else None
     return view, msg, gr.update(choices=choices, value=first), gr.update(choices=choices, value=first)
 
@@ -260,7 +260,7 @@ with gr.Blocks(title="SOC Alert Triage Agent") as demo:
 
     with gr.Tab("3. Alert detail"):
         picker = gr.Dropdown(label="Select an alert", choices=[])
-        ai_btn = gr.Button("Run AI analysis (local LLM)", variant="primary")
+        ai_btn = gr.Button("Run AI analysis", variant="primary")
         detail = gr.Markdown()
         gr.Markdown("**Tool trace** (shows the agent's steps):")
         trace_out = gr.Textbox(label="", lines=6, interactive=False)

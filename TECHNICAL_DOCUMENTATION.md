@@ -12,7 +12,9 @@ TriageMate is a defensive AI agent that triages security alerts. An analyst load
 a batch of SIEM alerts; for each one the agent summarises it, maps it to a MITRE
 ATT&CK technique, scores its risk, explains why, cites supporting knowledge, and
 recommends safe next steps. A human approves before any ticket is finalised.
-Everything runs locally. There is no cloud and no paid API key.
+The deterministic pipeline runs locally. The LLM can use local Ollama or the
+optional hosted Groq/Gemini providers; hosted providers require an API key and
+should only receive synthetic or approved data.
 
 ---
 
@@ -70,9 +72,10 @@ reliable core, intelligent layer on top.
 - `rag.py` - the retriever. Builds a knowledge base from the ATT&CK subset and the
   SOC playbook, then returns the most relevant passages for an alert. Two backends
   (see section 5).
-- `llm.py` - `analyze_with_llm()` calls the local Ollama model to write the
-  analyst-facing summary, priority reason, and next steps, grounded in the
-  retrieved knowledge. Falls back to rules if Ollama is not running.
+- `llm.py` - `analyze_with_llm()` calls the configured Ollama, Groq, or Gemini
+  model to write the analyst-facing summary, priority reason, and next steps,
+  grounded in the retrieved knowledge. Falls back to rules if the provider is
+  unavailable.
 - `pipeline.py` - ties steps 1 to 4 together and produces the sorted alert queue.
 - `knowledge/mitre_kb.json` - the ATT&CK technique descriptions (the RAG source).
 - `knowledge/playbook.json` - the SOC investigation playbook (the other RAG source).
@@ -126,15 +129,15 @@ search. The UI shows which backend is active.
 
 ## 6. How the LLM step works (and why it is safe)
 
-`llm.py` calls Ollama's local API. Before calling, it retrieves knowledge (RAG)
-and puts it in the prompt, asking the model to ground its answer and respond in
-strict JSON. If Ollama is not installed, times out, or errors, the code catches
-it and returns a rule-based explanation instead, still with citations. So the app
-always produces a result. The UI labels whether the answer came from the LLM or
-the fallback.
+`llm.py` calls the configured provider. Before calling, it retrieves knowledge
+(RAG) and puts it in the prompt, asking the model to ground its answer and
+respond in strict JSON. If the provider is unavailable, times out, or errors,
+the code catches it and returns a rule-based explanation instead, still with
+citations. So the app always produces a result. The UI labels whether the
+answer came from the LLM or the fallback.
 
-To enable the real LLM: install Ollama, run `ollama pull llama3.1:8b`, then start
-the app. See `LLM_SETUP.md`.
+To enable the real LLM, configure `.env` as described in `LLM_SETUP.md`, then
+start the app.
 
 ---
 

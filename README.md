@@ -16,7 +16,9 @@ Security analysts receive far more alerts than they can read, and most are harml
 3. Assigns a risk score and priority, and explains why.
 4. Recommends safe next investigation steps.
 
-Nothing becomes a final ticket until the analyst approves it. Everything runs locally through Ollama, so there is no cloud and no paid API key.
+Nothing becomes a final ticket until the analyst approves it. The default is
+local Ollama, but the project can also use a hosted Groq or Gemini model when
+you do not want to download a multi-gigabyte local model.
 
 ---
 
@@ -31,7 +33,7 @@ Upload alerts
 Log parser  ->  Rule based scorer  ->  MITRE lookup     (always run, deterministic)
       |
       v
-Local LLM (Ollama)  decides and calls tools:            (the one LLM step)
+Configured LLM (Ollama, Groq, or Gemini) writes the explanation: (one LLM step)
    - MITRE lookup        tactic and technique
    - Ticket writer       structured JSON ticket
       |
@@ -106,15 +108,17 @@ The terminal prints a local address such as `http://127.0.0.1:7860`. Open it in 
 
 To stop the app, press Ctrl and C in the terminal.
 
-The app runs with no LLM by default and uses a rule based fallback. To enable the real AI analysis, see **LLM_SETUP.md**.
+The app uses a rule-based fallback if no provider is available. To enable AI
+analysis, see **LLM_SETUP.md**.
 
 ---
 
-## Turning on the local LLM
+## Turning on an LLM provider
 
-1. Install Ollama from https://ollama.com.
-2. Pull a model: `ollama pull llama3.1:8b` (or `qwen2.5:7b`).
-3. Restart the app. The Upload tab status line will read "Local LLM: online".
+1. Keep the default Ollama setup, or copy `.env.example` to `.env`.
+2. For a no-download setup, select `LLM_PROVIDER=groq` or `LLM_PROVIDER=gemini`
+   and add the corresponding API key.
+3. Restart the app. The Upload tab status line will show the provider status.
 
 Full details and troubleshooting are in **LLM_SETUP.md**. Keep Ollama bound to localhost, since its API has no authentication by default.
 
