@@ -73,13 +73,13 @@ Calculate deterministic risk score
 Map behavior to MITRE ATT&CK
       |
       v
-Retrieve relevant MITRE and playbook knowledge
-      |
-      v
 Display alerts in the queue
       |
       v
 Request AI analysis
+      |
+      v
+Retrieve relevant MITRE and playbook knowledge
       |
       v
 Generate summary, priority reason, and safe next steps
@@ -101,16 +101,17 @@ Display dashboard and evaluation results
 The application starts from `app.py`. It loads the Gradio interface, alert
 pipeline, RAG knowledge base, dashboard, and configured LLM provider.
 
-The LLM configuration is read from the project-root `.env` file:
+The optional LLM configuration is read from the project-root `.env` file:
 
 ```text
-LLM_PROVIDER=groq
-LLM_MODEL=<configured Groq model>
-GROQ_API_KEY=<private API key>
+LLM_PROVIDER=ollama|groq|gemini
+LLM_MODEL=<provider-appropriate model>
+<provider-specific credential, if required>
 ```
 
-The API key must never be included in this document or committed to Git. The
-project ignores `.env` through `.gitignore`.
+Ollama is the default and runs locally. Groq and Gemini require their
+provider-specific API keys. Credentials must never be included in this
+document or committed to Git. The project ignores `.env` through `.gitignore`.
 
 ### Step 2: Alert ingestion
 
@@ -181,7 +182,7 @@ T1490 - Inhibit System Recovery
 Tactic: Impact
 ```
 
-### Step 6: RAG retrieval
+### Step 6: RAG retrieval during AI analysis
 
 `triage/rag.py` searches the project knowledge base for relevant information.
 The knowledge base contains MITRE technique descriptions and SOC
@@ -203,8 +204,8 @@ important alerts.
 ### Step 8: AI analysis
 
 When the analyst selects an alert and clicks **Run AI analysis**, or runs AI
-analysis over a queue, `triage/llm.py` sends the following information to
-Groq:
+analysis over a queue, the application retrieves relevant knowledge and sends
+the following information to the configured LLM provider:
 
 - Normalized alert fields
 - Rule-based score and priority
@@ -233,9 +234,9 @@ Detail tab.
 
 ### Step 9: Fallback behavior
 
-If Groq is unavailable, the API key is invalid, the request times out, or the
-response cannot be parsed, the application uses a predefined rule-based
-explanation instead of crashing.
+If the configured provider is unavailable, credentials are invalid, the
+request times out, or the response cannot be parsed, the application uses a
+predefined rule-based explanation instead of crashing.
 
 The result is labelled as a rule-based fallback. This means the core
 application continues to work even when the LLM is offline.
@@ -260,7 +261,7 @@ The Alert Detail tab displays:
 The tool trace shows the processing sequence:
 
 ```text
-Parser -> Scorer -> MITRE lookup -> RAG retrieval -> LLM analysis
+Parser -> Scorer -> MITRE lookup -> RAG retrieval -> configured LLM or fallback
 ```
 
 ### Step 11: Human review and approval
@@ -312,22 +313,23 @@ TriageMate is a hybrid system:
 
 ```text
 Deterministic Python tools = reliable analysis
-Groq LLM                  = explanation and recommendations
+Configured LLM/fallback   = explanation and recommendations
 Human analyst             = final approval
 ```
 
-The LLM does not replace the entire security pipeline. The parser, scorer,
-MITRE mapper, and RAG retriever run first. The LLM then uses their outputs to
-produce a grounded explanation. This design makes the system safer,
-explainable, and usable even when the LLM is unavailable.
+The LLM does not replace the entire security pipeline. The parser, scorer, and
+MITRE mapper run first when the queue is loaded. When analysis is requested,
+the RAG retriever supplies relevant knowledge to the configured LLM. This
+design makes the system safer, explainable, and usable even when the LLM is
+unavailable.
 
 ## 6. Short presentation explanation
 
 > TriageMate helps SOC analysts process large numbers of security alerts.
 > First, it normalizes each alert and applies a deterministic rule-based risk
 > scorer. It then maps suspicious behavior to MITRE ATT&CK and retrieves
-> relevant investigation guidance using RAG. Groq generates a concise summary,
-> explains the priority, and recommends safe next steps. The analyst reviews
-> the result and must approve it before a structured JSON ticket is created.
-> If Groq is unavailable, the application uses a rule-based fallback so the
-> workflow continues safely.
+> relevant investigation guidance using RAG. The configured LLM generates a
+> concise summary, explains the priority, and recommends safe next steps. The
+> analyst reviews the result and must approve it before a structured JSON ticket
+> is created. If the provider is unavailable, the application uses a rule-based
+> fallback so the workflow continues safely.
