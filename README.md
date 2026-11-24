@@ -24,24 +24,34 @@ you do not want to download a multi-gigabyte local model.
 
 ## How it works
 
-TriageMate uses a hybrid design. Plain Python always parses and scores each alert first, so the app works even if the model is offline. A local LLM then adds reasoning and chooses which tools to run. The analyst approves before anything is finalized.
+TriageMate uses a hybrid design. Plain Python always parses, scores, classifies,
+and maps each alert before any model call, so the queue works even if the model
+is offline. When analysis is requested, the app retrieves relevant knowledge
+and sends the alert plus deterministic results to the configured LLM for an
+analyst-facing explanation. The analyst approves before anything is finalized.
 
 ```
 Upload alerts
       |
       v
-Log parser  ->  Rule based scorer  ->  MITRE lookup     (always run, deterministic)
+Parser -> Rule scorer -> ML category model -> MITRE lookup
+                         (always run locally; rule score remains the safety baseline)
       |
       v
-Configured LLM (Ollama, Groq, or Gemini) writes the explanation: (one LLM step)
-   - MITRE lookup        tactic and technique
-   - Ticket writer       structured JSON ticket
+Alert queue
       |
       v
-Analyst approval  ->  Approved ticket (JSON)            (human in the loop)
+Selected alert -> RAG retrieval -> Configured LLM
+                 (Ollama, Groq, or Gemini; on demand)
+      |
+      v
+Analyst review -> Approval gates -> Approved ticket (JSON)
+                  (human in the loop)
 ```
 
-If the LLM times out or is not installed, the alert still reaches the analyst with its rule based score and a fallback explanation, so a demo never stalls.
+If the LLM times out, is unavailable, or returns invalid data, the alert still
+reaches the analyst with its deterministic results and a rule-based fallback
+explanation, so the workflow does not stall.
 
 ---
 
@@ -62,8 +72,8 @@ triagemate/
     mitre.py             MITRE ATT&CK lookup tool
     ml_classifier.py     TF-IDF + Logistic Regression category model
     rag.py               playbook & MITRE RAG retriever (TF-IDF / optional Chroma)
-    llm.py               configured LLM agent with safe fallback
-    pipeline.py          load -> parse -> score -> MITRE
+    llm.py                 configured LLM agent with RAG grounding and safe fallback
+    pipeline.py            load -> parse -> score -> ML category -> MITRE
     dashboard.py         dashboard metrics and charts
     knowledge/
       playbook.json      investigation playbook entries
@@ -110,25 +120,27 @@ python app.py
 
 The terminal prints a local address such as `http://127.0.0.1:7860`. Open it in a browser. The interface has five tabs:
 
-1. **Upload** - load a JSON Lines file, or leave it empty to use the built in sample set, then click "Load and triage".
-2. **Alert queue** - all alerts sorted by risk, most serious at the top.
-3. **Alert detail** - pick an alert to see its score, MITRE mapping, and reasons. Click "Run AI analysis" for the LLM summary and next steps, with a tool trace of each step the agent took.
-4. **Approval & ticket** - approve an alert to create its JSON ticket.
-5. **Dashboard** - summary metrics and charts across the triaged alert batch.
+1. **Upload** - load a JSON Lines file, or leave it empty to use the built-in sample set, then click "Load and triage".
+2. **Alert queue** - review all alerts sorted by rule priority and score. Run AI analysis over the highest-risk alerts when needed; rule-versus-AI disagreements are highlighted for review.
+3. **Alert detail** - pick an alert to see deterministic results, MITRE mapping, reasons, and raw data. Click "Run AI analysis" for the grounded summary and safe next steps, with a trace of the parser, scorer, MITRE, RAG, and LLM steps.
+4. **Approval & ticket** - run AI analysis, confirm analyst review, and approve an alert to create its structured JSON ticket. Recommended containment actions require a separate approval.
+5. **Dashboard** - refresh summary metrics and charts for priorities, categories, MITRE techniques, rule-versus-AI results, and ticket approvals.
 
 To stop the app, press Ctrl and C in the terminal.
 
-The app uses a rule-based fallback if no provider is available. To enable AI
-analysis, see **LLM_SETUP.md**.
+The app uses a rule-based fallback if no provider is available. AI analysis is
+run only for selected alerts or the requested queue limit; loading the queue
+does not call the LLM. To configure a provider, see **LLM_SETUP.md**.
 
 ---
 
 ## Turning on an LLM provider
 
-1. Keep the default Ollama setup, or copy `.env.example` to `.env`.
+1. Keep the default local Ollama setup, or copy `.env.example` to `.env`.
 2. For a no-download setup, select `LLM_PROVIDER=groq` or `LLM_PROVIDER=gemini`
    and add the corresponding API key.
-3. Restart the app. The Upload tab status line will show the provider status.
+3. Restart the app. The Upload tab status line will show the provider and
+   whether it is online; the built-in fallback remains available offline.
 
 Full details and troubleshooting are in **LLM_SETUP.md**. Keep Ollama bound to localhost, since its API has no authentication by default.
 
@@ -143,10 +155,11 @@ python eval/evaluate.py   # measure accuracy against the answer key
 
 The pipeline includes a supervised category model trained from
 `data/all_labels.csv`: TF-IDF features with Logistic Regression. The model is
-evaluated on a held-out test split by `eval/evaluate.py`; the rule-based
-category and priority scorer remains the safety baseline. Current results can
-change when the dataset changes, so use the evaluation command for the latest
-numbers.
+evaluated on a stratified held-out test split by `eval/evaluate.py`; the
+rule-based category and priority scorer remains the safety baseline. The
+evaluation also reports per-priority precision, recall, F1, and High/Critical
+recall. Current results can change when the dataset changes, so use the
+evaluation command for the latest numbers.
 
 ---
 
@@ -159,11 +172,12 @@ The dataset combines three sources: 100 synthetic alerts generated with a fixed 
 ## Safety boundaries
 
 1. Defensive only. The agent recommends investigation steps and never acts on systems.
-2. Human approval is required before any ticket is finalized.
-3. Synthetic and public research data only.
-4. The local model stays bound to localhost.
-5. No API keys or credentials are committed to the repository.
-6. A single agent with a few tools, not a multi agent system.
+2. Human approval is required before any ticket is finalized; AI analysis must be run first.
+3. Recommended containment actions require a separate analyst confirmation.
+4. Synthetic and public research data only.
+5. The local model stays bound to localhost.
+6. No API keys or credentials are committed to the repository.
+7. A single agent with deterministic tools, not a multi-agent system.
 
 ---
 
@@ -178,9 +192,9 @@ LLM providers, a rule-based scorer, MITRE lookup, pandas, and pytest.
 
 1. Done: data pipeline, rule-based scorer, supervised ML category model, MITRE
    lookup, RAG playbook retrieval (built-in TF-IDF with optional Chroma),
-   configurable LLM agent with fallback, Gradio interface with dashboard tab,
-   human approval, tests, and evaluation.
-2. Next: failure handling tests, Docker packaging, and the final report and demo.
+   configurable LLM agent with fallback, queue-wide analysis, tool trace,
+   Gradio dashboard, human and containment approval gates, tests, and evaluation.
+2. Next: logging/monitoring, Docker packaging, and the final report and demo.
 
 ---
 
