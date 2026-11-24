@@ -54,20 +54,28 @@ triagemate/
     all_alerts.jsonl     110 alerts (synthetic + real OTRF + ransomware)
     all_labels.csv       answer key for evaluation
     generate_alerts.py   synthetic alert generator
+    expand_dataset.py    dataset expansion helper
     DATA_CARD.md         where the data came from and its limits
   triage/
     parser.py            flattens raw alerts into standard fields
     scorer.py            rule based baseline severity scorer
     mitre.py             MITRE ATT&CK lookup tool
     ml_classifier.py     TF-IDF + Logistic Regression category model
+    rag.py               playbook & MITRE RAG retriever (TF-IDF / optional Chroma)
     llm.py               configured LLM agent with safe fallback
     pipeline.py          load -> parse -> score -> MITRE
+    dashboard.py         dashboard metrics and charts
+    knowledge/
+      playbook.json      investigation playbook entries
+      mitre_kb.json      MITRE ATT&CK knowledge base
   eval/
     evaluate.py          precision and recall against the answer key
   tests/
     test_pipeline.py     unit tests (pytest)
   requirements.txt
   LLM_SETUP.md           how to turn on the local LLM
+  TECHNICAL_DOCUMENTATION.md
+  WORKFLOW_EXPLANATION.md
   .env.example           copy to .env to change providers
 ```
 
@@ -100,12 +108,13 @@ You will know the environment is active when `(.venv)` appears at the start of y
 python app.py
 ```
 
-The terminal prints a local address such as `http://127.0.0.1:7860`. Open it in a browser. The interface has four tabs:
+The terminal prints a local address such as `http://127.0.0.1:7860`. Open it in a browser. The interface has five tabs:
 
 1. **Upload** - load a JSON Lines file, or leave it empty to use the built in sample set, then click "Load and triage".
 2. **Alert queue** - all alerts sorted by risk, most serious at the top.
 3. **Alert detail** - pick an alert to see its score, MITRE mapping, and reasons. Click "Run AI analysis" for the LLM summary and next steps, with a tool trace of each step the agent took.
-4. **Approval and ticket** - approve an alert to create its JSON ticket.
+4. **Approval & ticket** - approve an alert to create its JSON ticket.
+5. **Dashboard** - summary metrics and charts across the triaged alert batch.
 
 To stop the app, press Ctrl and C in the terminal.
 
@@ -168,10 +177,10 @@ LLM providers, a rule-based scorer, MITRE lookup, pandas, and pytest.
 ## Roadmap
 
 1. Done: data pipeline, rule-based scorer, supervised ML category model, MITRE
-   lookup, configurable LLM agent with fallback, Gradio interface, human
-   approval, tests, and evaluation.
-2. Next: RAG playbook retrieval with Chroma to ground the explanations in written investigation guidance.
-3. Then: logging and monitoring tab, failure handling tests, Docker packaging, and the final report and demo.
+   lookup, RAG playbook retrieval (built-in TF-IDF with optional Chroma),
+   configurable LLM agent with fallback, Gradio interface with dashboard tab,
+   human approval, tests, and evaluation.
+2. Next: failure handling tests, Docker packaging, and the final report and demo.
 
 ---
 

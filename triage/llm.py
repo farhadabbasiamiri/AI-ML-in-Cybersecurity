@@ -72,19 +72,19 @@ def llm_available() -> bool:
     try:
         if LLM_PROVIDER == "ollama":
             base = OLLAMA_URL.rsplit("/api/", 1)[0]
-            requests.get(base + "/api/tags", timeout=3).raise_for_status()
+            requests.get(base + "/api/tags", timeout=20).raise_for_status()
             return True
         if LLM_PROVIDER == "groq":
             key = os.environ["GROQ_API_KEY"]
             requests.get(
                 "https://api.groq.com/openai/v1/models",
                 headers={"Authorization": "Bearer " + key},
-                timeout=3,
+                timeout=20,
             ).raise_for_status()
             return True
         if LLM_PROVIDER == "gemini":
             key = os.environ["GEMINI_API_KEY"]
-            requests.get(GEMINI_URL, params={"key": key}, timeout=3).raise_for_status()
+            requests.get(GEMINI_URL, params={"key": key}, timeout=20).raise_for_status()
             return True
         return False
     except Exception:
