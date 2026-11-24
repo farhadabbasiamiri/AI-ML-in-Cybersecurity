@@ -36,7 +36,7 @@ should only receive synthetic or approved data.
    [4] mitre.py       map the alert to a MITRE ATT&CK technique (always runs)
                               |
                               v
-   [5] rag.py         retrieve relevant ATT&CK + playbook knowledge (always runs)
+   [5] rag.py         retrieve relevant ATT&CK + playbook knowledge (on demand)
                               |
                               v
    [6] llm.py         configured LLM writes summary, priority reason, safe steps,
@@ -50,11 +50,12 @@ should only receive synthetic or approved data.
                       JSON ticket (priority, MITRE, summary, steps, citations)
 ```
 
-Steps 1 to 5 run locally before the LLM request. The ML model is trained from
-the labelled training data and then performs local inference; the rule-based
-scorer remains the safety baseline. The LLM is the explanation layer and
-degrades safely. This is the "hybrid" design: reliable core, intelligent layer
-on top.
+Steps 1 to 4 run locally when the queue is loaded. RAG retrieval and the LLM
+run on demand for a selected alert or a requested batch of alerts. The ML model
+is trained from the labelled training data and then performs local inference;
+the rule-based scorer remains the safety baseline. The LLM is the explanation
+layer and degrades safely. This is the "hybrid" design: reliable core,
+intelligent layer on top.
 
 ---
 
@@ -89,7 +90,8 @@ on top.
 - `knowledge/playbook.json` - the SOC investigation playbook (the other RAG source).
 
 ### Application and support
-- `app.py` - the Gradio interface (four tabs).
+- `app.py` - the Gradio interface (five tabs: Upload, Alert queue, Alert detail,
+  Approval & ticket, and Dashboard).
 - `eval/evaluate.py` - measures accuracy against the answer key.
 - `tests/test_pipeline.py` - unit tests (run with `pytest`).
 
